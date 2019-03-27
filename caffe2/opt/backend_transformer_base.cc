@@ -5,7 +5,7 @@
 namespace caffe2 {
 
 namespace {
-void AnnotateOpIndex(NetDef* net) {
+void annotateOpIndex(NetDef* net) {
   int i = 0;
   for (auto& op : *(net->mutable_op())) {
     AddArgument(kNetPos, i++, &op);
@@ -15,8 +15,18 @@ void AnnotateOpIndex(NetDef* net) {
 
 std::string BackendTransformerBase::getModelId(const NetDef& net) {
   static std::atomic<size_t> seq_id{0};
-  auto model_id =
-      ArgumentHelper(net).GetSingleArgument<std::string>(kModelId, "");
+  std::string model_id;
+  for (const auto& arg : net.arg()) {
+    if (arg.name() == kModelId) {
+      if (arg.has_s()) {
+        model_id = arg.s();
+      } else if (arg.has_i()) {
+        model_id = c10::to_string(arg.i());
+      }
+      break;
+    }
+  }
+
   if (model_id.empty()) {
     model_id = "unnamed_" + c10::to_string(seq_id++);
   }
@@ -42,7 +52,7 @@ BackendTransformerBase::ssaRewriteAndMapNames(
     const std::unordered_map<std::string, TensorShape>& input_shape_hints) {
   input_mapping_ = onnx::SsaRewrite(nullptr, pred_net);
   // Annote the ops with net position
-  AnnotateOpIndex(pred_net);
+  annotateOpIndex(pred_net);
 
   // Since we are going to create a mapped workspace, we need to make sure that
   // the parent workspace has the mapped blob names. If the blobs don't exist
@@ -78,11 +88,15 @@ ShapeInfoMap BackendTransformerBase::inferShapes(
       shape_map[s] = shape_info;
     }
   }
+  // We treat hinted shapes as BATCH. If there are shape hints on blobs in the
+  // workspace, since they are already inserted as CONSTANT, it will take effect
+  // here. For SEQ typed tensors, there are only a few of them and they will be
+  // handled by BoundShapeInferencer.
   for (const auto& kv : shape_hints_mapped) {
     shape_map.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(kv.first),
-        std::forward_as_tuple(ShapeInfo::DimType::CONSTANT, kv.second));
+        std::forward_as_tuple(ShapeInfo::DimType::BATCH, kv.second));
   }
   BoundShapeInferencer eng(spec);
   eng.InferBoundShapeAndType(*pred_net, shape_map);

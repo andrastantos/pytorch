@@ -20,7 +20,7 @@ void _copy__cpu(at::Tensor& self, const at::Tensor& src) {
 template <typename self_T>
 void _copy__cpu(at::Tensor& self, const at::Tensor& src) {
   AT_CHECK(self.numel() == src.numel(), "sizes do not match");
-  AT_DISPATCH_ALL_TYPES_AND(at::ScalarType::Half, src.type(), "_copy__cpu", [&]() {
+  AT_DISPATCH_ALL_TYPES_AND2(at::ScalarType::Half, at::ScalarType::Bool, src.scalar_type(), "_copy__cpu", [&]() {
     _copy__cpu<self_T, scalar_t>(self, src);
   });
 }
@@ -42,8 +42,8 @@ Tensor& _s_copy__cpu(Tensor& self, const Tensor& src, bool non_blocking) {
     _s_copy_from(src, self, non_blocking);
     return self;
   }
-  AT_DISPATCH_ALL_TYPES_AND(
-    at::ScalarType::Half, self.type(), "_copy__cpu", [&]() { ::_copy__cpu<scalar_t>(self, src); });
+  AT_DISPATCH_ALL_TYPES_AND2(at::ScalarType::Half, at::ScalarType::Bool,
+      self.scalar_type(), "_copy__cpu", [&]() { ::_copy__cpu<scalar_t>(self, src); });
   return self;
 }
 
@@ -59,7 +59,7 @@ void _copy_same_type_transpose_(Tensor& self, const Tensor& src) {
   Tensor buf = empty({BLOCK_SZ, BLOCK_SZ}, self.options());
 
   AT_DISPATCH_ALL_TYPES_AND(
-    at::ScalarType::Half, self.type(), "_copy_same_type_transpose_", [&]() {
+    at::ScalarType::Half, self.scalar_type(), "_copy_same_type_transpose_", [&]() {
         scalar_t* sp = src.data<scalar_t>();
         scalar_t* rp = self.data<scalar_t>();
         scalar_t* bp = buf.data<scalar_t>();
@@ -105,6 +105,7 @@ void _copy_same_type__cpu(Tensor& self, const Tensor& src) {
     return;
   }
 
+  // TODO: Replace this with TensorIterator!
   bool serial_path = false;
   if (self.numel() == src.numel()) {
     if (self.is_contiguous() && src.is_contiguous()) {
@@ -115,7 +116,7 @@ void _copy_same_type__cpu(Tensor& self, const Tensor& src) {
 #ifdef _OPENMP
       if (!in_parallel_region()) {
         AT_DISPATCH_ALL_TYPES_AND(
-          at::ScalarType::Half, self.type(), "_copy_same_type_", [&]() {
+          at::ScalarType::Half, self.scalar_type(), "_copy_same_type_", [&]() {
             at::CPU_tensor_parallel_apply2<scalar_t, scalar_t>(
                 self, src, [](scalar_t& self_val, const scalar_t& src_val) {
                   self_val = src_val;
@@ -134,7 +135,7 @@ void _copy_same_type__cpu(Tensor& self, const Tensor& src) {
 
   if (serial_path) {
     AT_DISPATCH_ALL_TYPES_AND(
-      at::ScalarType::Half, self.type(), "_copy_same_type_", [&]() {
+      at::ScalarType::Half, self.scalar_type(), "_copy_same_type_", [&]() {
         at::CPU_tensor_apply2<scalar_t, scalar_t>(
             self, src, [](scalar_t& self_val, const scalar_t& src_val) {
               self_val = src_val;

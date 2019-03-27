@@ -14,7 +14,6 @@
 
 #include <iostream>
 #include <sstream>
-#include <unordered_map>
 
 namespace torch {
 namespace jit {
@@ -222,7 +221,7 @@ void initPythonIRBindings(PyObject* module_) {
       .def(
           "_export_onnx",
           [](const std::shared_ptr<Graph> g,
-             const std::map<std::string, at::Tensor>& initializers,
+             const std::vector<at::Tensor>& initializers,
              int64_t onnx_opset_version,
              bool defer_weight_export,
              ::torch::onnx::OperatorExportTypes operator_export_type) {
@@ -238,7 +237,7 @@ void initPythonIRBindings(PyObject* module_) {
                 python_serialized_export_map;
             for (auto& kv : export_map) {
               auto t = kv.second;
-              size_t copy_bytes = t.type().elementSizeInBytes() * t.numel();
+              size_t copy_bytes = t.element_size() * t.numel();
               // TODO: this is an unecessary copy. In theory we can directly
               // return the map from identifier to Tensor, but we need some API
               // in Python to get raw `bytes` containing the raw tensor data.
@@ -256,7 +255,7 @@ void initPythonIRBindings(PyObject* module_) {
       .def(
           "_pretty_print_onnx",
           [](const std::shared_ptr<Graph> g,
-             const std::map<std::string, at::Tensor>& initializers,
+             const std::vector<at::Tensor>& initializers,
              int64_t onnx_opset_version,
              bool defer_weight_export,
              ::torch::onnx::OperatorExportTypes operator_export_type,
@@ -386,6 +385,7 @@ void initPythonIRBindings(PyObject* module_) {
           })
       .VS(copyMetadata)
       .VS(isTensor)
+      .VS(requires_grad)
       .def("toIValue", [](Value& n) { return toIValue(&n); })
       .def("type", [](Value& v) { return v.type(); });
 #undef VS
